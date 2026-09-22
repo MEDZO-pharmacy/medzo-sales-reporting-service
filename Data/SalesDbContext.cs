@@ -1,8 +1,43 @@
 using Medzo.SalesReporting.Domain;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+
 namespace Medzo.SalesReporting.Data;
+
 public sealed class SalesDbContext(DbContextOptions<SalesDbContext> options) : DbContext(options)
 {
- public DbSet<StockBatch> StockBatches => Set<StockBatch>(); public DbSet<Sale> Sales => Set<Sale>(); public DbSet<SaleItem> SaleItems => Set<SaleItem>(); public DbSet<BatchAllocation> BatchAllocations => Set<BatchAllocation>();
- protected override void OnModelCreating(ModelBuilder b) { b.Entity<Sale>().HasIndex(x => x.IdempotencyKey).IsUnique(); b.Entity<StockBatch>().ToTable(t => t.HasCheckConstraint("CK_StockBatch_RemainingQuantity", "RemainingQuantity >= 0")); b.Entity<SaleItem>().HasMany(x => x.Allocations).WithOne(x => x.SaleItem).HasForeignKey(x => x.SaleItemId); b.Entity<Sale>().HasMany(x => x.Items).WithOne(x => x.Sale).HasForeignKey(x => x.SaleId); }
+ public DbSet<StockBatch> StockBatches => Set<StockBatch>();
+ public DbSet<Sale> Sales => Set<Sale>();
+ public DbSet<SaleItem> SaleItems => Set<SaleItem>();
+ public DbSet<BatchAllocation> BatchAllocations => Set<BatchAllocation>();
+
+ protected override void OnModelCreating(ModelBuilder b)
+ {
+  var guidAsText = new GuidToStringConverter();
+
+  b.Entity<StockBatch>(entity =>
+  {
+   entity.Property(x => x.Id).HasConversion(guidAsText).HasColumnType("TEXT");
+   entity.ToTable(t => t.HasCheckConstraint("CK_StockBatch_RemainingQuantity", "RemainingQuantity >= 0"));
+  });
+  b.Entity<Sale>(entity =>
+  {
+   entity.Property(x => x.Id).HasConversion(guidAsText).HasColumnType("TEXT");
+   entity.HasIndex(x => x.IdempotencyKey).IsUnique();
+   entity.HasMany(x => x.Items).WithOne(x => x.Sale).HasForeignKey(x => x.SaleId);
+  });
+  b.Entity<SaleItem>(entity =>
+  {
+   entity.Property(x => x.Id).HasConversion(guidAsText).HasColumnType("TEXT");
+   entity.Property(x => x.SaleId).HasConversion(guidAsText).HasColumnType("TEXT");
+   entity.HasMany(x => x.Allocations).WithOne(x => x.SaleItem).HasForeignKey(x => x.SaleItemId);
+  });
+  b.Entity<BatchAllocation>(entity =>
+  {
+   entity.Property(x => x.Id).HasConversion(guidAsText).HasColumnType("TEXT");
+   entity.Property(x => x.SaleItemId).HasConversion(guidAsText).HasColumnType("TEXT");
+   entity.Property(x => x.StockBatchId).HasConversion(guidAsText).HasColumnType("TEXT");
+   entity.HasOne(x => x.StockBatch).WithMany().HasForeignKey(x => x.StockBatchId);
+  });
+ }
 }

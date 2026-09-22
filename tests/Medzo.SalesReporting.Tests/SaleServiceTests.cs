@@ -55,4 +55,22 @@ public sealed class SaleServiceTests
   var first=await service.CreateAsync(request,CancellationToken.None);var retry=await service.CreateAsync(request,CancellationToken.None);
   db.ChangeTracker.Clear();Assert.Equal(first.SaleId,retry.SaleId);Assert.True(retry.AlreadyProcessed);Assert.Equal(6,await db.StockBatches.Where(x=>x.Id==batch.Id).Select(x=>x.RemainingQuantity).SingleAsync());Assert.Single(await db.Sales.ToListAsync());
  }
+
+ [Fact]
+ public async Task Stores_guid_keys_as_text_and_updates_batches_successfully()
+ {
+  var (db, connection) = await CreateDbAsync(); await using var _ = connection;
+  var batch = Batch("p-text", "TEXT-ID", DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)), 8);
+  db.StockBatches.Add(batch);
+  await db.SaveChangesAsync();
+
+  await using var command = db.Database.GetDbConnection().CreateCommand();
+  command.CommandText = "SELECT typeof(\"Id\") FROM \"StockBatches\" LIMIT 1;";
+  Assert.Equal("text", (string?)await command.ExecuteScalarAsync());
+
+  var result = await new SaleService(db).CreateAsync(new("sale-text", [new("p-text", 3)]), CancellationToken.None);
+  Assert.False(result.AlreadyProcessed);
+  db.ChangeTracker.Clear();
+  Assert.Equal(5, await db.StockBatches.Where(x => x.Id == batch.Id).Select(x => x.RemainingQuantity).SingleAsync());
+ }
 }
