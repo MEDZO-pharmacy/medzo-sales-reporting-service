@@ -33,6 +33,7 @@ builder.Services.AddDbContext<SalesDbContext>(options =>
     options.UseSqlite(salesConnection ?? "Data Source=medzo-sales.db");
 });
 builder.Services.AddScoped<ISaleService, SaleService>();
+builder.Services.AddScoped<IExpiryAlertService, ExpiryAlertService>();
 builder.Services.AddHttpClient<ISaleItemSearchService, SaleItemSearchService>(client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Services:CatalogueInventory:BaseUrl"] ?? "http://localhost:5082");
