@@ -22,6 +22,7 @@ builder.Services.AddDbContext<SalesDbContext>(options =>
     options.UseSqlite(salesConnection ?? "Data Source=medzo-sales.db");
 });
 builder.Services.AddScoped<ISaleService, SaleService>();
+builder.Services.AddScoped<IExpiryAlertService, ExpiryAlertService>();
 
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
