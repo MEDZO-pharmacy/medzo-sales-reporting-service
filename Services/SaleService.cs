@@ -7,7 +7,11 @@ namespace Medzo.SalesReporting.Services;
 
 public sealed class SaleValidationException(string message) : Exception(message);
 public sealed class SaleConflictException(string message) : Exception(message);
-public interface ISaleService { Task<SaleResponse> CreateAsync(CreateSaleRequest request, CancellationToken ct); }
+public interface ISaleService
+{
+ Task<SaleResponse> CreateAsync(CreateSaleRequest request, CancellationToken ct);
+ Task<SaleReceiptResponse?> GetReceiptAsync(Guid saleId, CancellationToken ct);
+}
 
 public sealed class SaleService(SalesDbContext db) : ISaleService
 {
@@ -70,6 +74,12 @@ public sealed class SaleService(SalesDbContext db) : ISaleService
   return await GetResponseAsync(sale.Id, false, ct);
  }
 
+ public async Task<SaleReceiptResponse?> GetReceiptAsync(Guid saleId, CancellationToken ct)
+ {
+  var sale = await FindByIdAsync(saleId, ct);
+  return sale is null ? null : ToReceipt(sale);
+ }
+
  static void Validate(CreateSaleRequest r)
  {
   if (string.IsNullOrWhiteSpace(r.IdempotencyKey)) throw new SaleValidationException("An idempotency key is required.");
@@ -79,7 +89,11 @@ public sealed class SaleService(SalesDbContext db) : ISaleService
  }
 
  Task<Sale?> FindByKeyAsync(string key, CancellationToken ct) => db.Sales.Include(x => x.Items).ThenInclude(x => x.Allocations).ThenInclude(x => x.StockBatch).SingleOrDefaultAsync(x => x.IdempotencyKey == key, ct);
- async Task<SaleResponse> GetResponseAsync(Guid id, bool done, CancellationToken ct) => ToResponse(await db.Sales.Include(x => x.Items).ThenInclude(x => x.Allocations).ThenInclude(x => x.StockBatch).SingleAsync(x => x.Id == id, ct), done);
- static SaleResponse ToResponse(Sale sale, bool done) => new(sale.Id, done, sale.Items.Select(item => new SaleItemResponse(item.ProductId, item.Quantity, item.Allocations.Select(a => new BatchAllocationResponse(a.StockBatchId, a.StockBatch?.BatchNumber ?? string.Empty, a.StockBatch?.ExpiryDate ?? default, a.Quantity)).ToList())).ToList());
+ Task<Sale?> FindByIdAsync(Guid saleId, CancellationToken ct) => db.Sales.Include(x => x.Items).ThenInclude(x => x.Allocations).ThenInclude(x => x.StockBatch).SingleOrDefaultAsync(x => x.Id == saleId, ct);
+ async Task<SaleResponse> GetResponseAsync(Guid id, bool done, CancellationToken ct) => ToResponse(await FindByIdAsync(id, ct) ?? throw new InvalidOperationException("Completed sale was not found."), done);
+ static SaleResponse ToResponse(Sale sale, bool done) => new(sale.Id, done, sale.Items.Select(ToSaleItem).ToList(), ToReceipt(sale));
+ static SaleItemResponse ToSaleItem(SaleItem item) => new(item.ProductId, item.Quantity, ToAllocations(item));
+ static SaleReceiptResponse ToReceipt(Sale sale) => new(sale.Id, sale.CreatedAtUtc, sale.Items.Select(item => new ReceiptItemResponse(item.ProductId, item.Quantity, ToAllocations(item))).ToList());
+ static IReadOnlyList<BatchAllocationResponse> ToAllocations(SaleItem item) => item.Allocations.Select(a => new BatchAllocationResponse(a.StockBatchId, a.StockBatch?.BatchNumber ?? string.Empty, a.StockBatch?.ExpiryDate ?? default, a.Quantity)).ToList();
  static bool IsIdempotencyConflict(DbUpdateException e) => e.InnerException?.Message.Contains("IdempotencyKey", StringComparison.OrdinalIgnoreCase) == true || e.Message.Contains("IdempotencyKey", StringComparison.OrdinalIgnoreCase);
 }
