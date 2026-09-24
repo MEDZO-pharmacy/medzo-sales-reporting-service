@@ -30,7 +30,7 @@ public sealed class SaleService(SalesDbContext db) : ISaleService
   foreach (var line in request.Items)
   {
    var batches = await db.StockBatches
-    .Where(x => x.ProductId == line.ProductId && x.RemainingQuantity > 0 && x.ExpiryDate >= DateOnly.FromDateTime(DateTime.UtcNow))
+    .Where(x => x.ProductId == line.ProductId && !x.IsRemoved && x.RemainingQuantity > 0 && x.ExpiryDate >= DateOnly.FromDateTime(DateTime.UtcNow))
     .OrderBy(x => x.ExpiryDate).ThenBy(x => x.CreatedAtUtc).ThenBy(x => x.Id)
     .ToListAsync(ct);
 

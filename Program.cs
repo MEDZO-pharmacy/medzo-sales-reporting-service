@@ -23,6 +23,7 @@ builder.Services.AddDbContext<SalesDbContext>(options =>
 });
 builder.Services.AddScoped<ISaleService, SaleService>();
 builder.Services.AddScoped<IExpiryAlertService, ExpiryAlertService>();
+builder.Services.AddScoped<IBatchRemovalService, BatchRemovalService>();
 
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
