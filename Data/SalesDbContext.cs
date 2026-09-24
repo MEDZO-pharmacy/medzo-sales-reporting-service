@@ -10,6 +10,7 @@ public sealed class SalesDbContext(DbContextOptions<SalesDbContext> options) : D
  public DbSet<Sale> Sales => Set<Sale>();
  public DbSet<SaleItem> SaleItems => Set<SaleItem>();
  public DbSet<BatchAllocation> BatchAllocations => Set<BatchAllocation>();
+ public DbSet<BatchRemovalAudit> BatchRemovalAudits => Set<BatchRemovalAudit>();
 
  protected override void OnModelCreating(ModelBuilder b)
  {
@@ -41,6 +42,14 @@ public sealed class SalesDbContext(DbContextOptions<SalesDbContext> options) : D
    entity.Property(x => x.SaleItemId).HasConversion(guidAsText).HasColumnType(guidColumnType);
    entity.Property(x => x.StockBatchId).HasConversion(guidAsText).HasColumnType(guidColumnType);
    entity.HasOne(x => x.StockBatch).WithMany().HasForeignKey(x => x.StockBatchId);
+  });
+  b.Entity<BatchRemovalAudit>(entity =>
+  {
+   entity.Property(x => x.Id).HasConversion(guidAsText).HasColumnType(guidColumnType);
+   entity.Property(x => x.BatchId).HasConversion(guidAsText).HasColumnType(guidColumnType);
+   entity.Property(x => x.Reason).HasMaxLength(500);
+   entity.Property(x => x.RemovedBy).HasMaxLength(128);
+   entity.HasIndex(x => x.BatchId).IsUnique();
   });
  }
 }
