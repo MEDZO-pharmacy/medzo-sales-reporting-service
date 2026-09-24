@@ -73,4 +73,51 @@ public sealed class SaleServiceTests
   db.ChangeTracker.Clear();
   Assert.Equal(5, await db.StockBatches.Where(x => x.Id == batch.Id).Select(x => x.RemainingQuantity).SingleAsync());
  }
+
+ [Fact]
+ public async Task Creates_and_retrieves_a_receipt_from_the_completed_sale()
+ {
+  var (db, connection) = await CreateDbAsync(); await using var _ = connection;
+  var batch = Batch("p1", "LOT-1", DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)), 10);
+  db.StockBatches.Add(batch); await db.SaveChangesAsync();
+
+  var service = new SaleService(db);
+  var sale = await service.CreateAsync(new("receipt-sale", [new("p1", 3)]), CancellationToken.None);
+  var receipt = await service.GetReceiptAsync(sale.SaleId, CancellationToken.None);
+
+  Assert.NotNull(receipt);
+  Assert.Equal(sale.SaleId, receipt.SaleId);
+  Assert.Equal(sale.Receipt.CompletedAtUtc, receipt.CompletedAtUtc);
+  var item = Assert.Single(receipt.Items);
+  Assert.Equal("p1", item.ProductId);
+  Assert.Equal(3, item.Quantity);
+  var allocation = Assert.Single(item.BatchAllocations);
+  Assert.Equal("LOT-1", allocation.BatchNumber);
+  Assert.Equal(3, allocation.Quantity);
+ }
+
+ [Fact]
+ public async Task Reuses_the_same_receipt_for_an_idempotent_sale_retry()
+ {
+  var (db, connection) = await CreateDbAsync(); await using var _ = connection;
+  db.StockBatches.Add(Batch("p1", "LOT-1", DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)), 10));
+  await db.SaveChangesAsync();
+
+  var service = new SaleService(db);
+  var first = await service.CreateAsync(new("receipt-retry", [new("p1", 2)]), CancellationToken.None);
+  var retry = await service.CreateAsync(new("receipt-retry", [new("p1", 2)]), CancellationToken.None);
+
+  Assert.True(retry.AlreadyProcessed);
+  Assert.Equal(first.SaleId, retry.Receipt.SaleId);
+  Assert.Equal(first.Receipt.CompletedAtUtc, retry.Receipt.CompletedAtUtc);
+  Assert.Single(await db.Sales.ToListAsync());
+ }
+
+ [Fact]
+ public async Task Does_not_return_a_receipt_for_an_unknown_sale()
+ {
+  var (db, connection) = await CreateDbAsync(); await using var _ = connection;
+  var receipt = await new SaleService(db).GetReceiptAsync(Guid.NewGuid(), CancellationToken.None);
+  Assert.Null(receipt);
+ }
 }
