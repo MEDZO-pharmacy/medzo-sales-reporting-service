@@ -25,4 +25,11 @@ public sealed class SalesController(ISaleService sales) : ControllerBase
    return Conflict(new { error = e.Message, retryable = true });
   }
  }
+
+ [HttpGet("{saleId:guid}/receipt")]
+ public async Task<ActionResult<SaleReceiptResponse>> GetReceipt(Guid saleId, CancellationToken ct)
+ {
+  var receipt = await sales.GetReceiptAsync(saleId, ct);
+  return receipt is null ? NotFound(new { error = "No completed sale was found for this receipt." }) : Ok(receipt);
+ }
 }
