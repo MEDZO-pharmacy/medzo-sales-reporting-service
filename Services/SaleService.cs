@@ -30,13 +30,13 @@ public sealed class SaleService(SalesDbContext db) : ISaleService
   foreach (var line in request.Items)
   {
    var batches = await db.StockBatches
-    .Where(x => x.ProductId == line.ProductId && x.RemainingQuantity > 0 && x.ExpiryDate >= DateOnly.FromDateTime(DateTime.UtcNow))
+    .Where(x => x.ProductId == line.ProductId && x.RemainingQuantity > 0 && x.ExpiryDate > DateOnly.FromDateTime(DateTime.UtcNow))
     .OrderBy(x => x.ExpiryDate).ThenBy(x => x.CreatedAtUtc).ThenBy(x => x.Id)
     .ToListAsync(ct);
 
    if (batches.Sum(x => x.RemainingQuantity) < line.Quantity)
    {
-    var hasExpiredStock = await db.StockBatches.AnyAsync(x => x.ProductId == line.ProductId && x.RemainingQuantity > 0 && x.ExpiryDate < DateOnly.FromDateTime(DateTime.UtcNow), ct);
+    var hasExpiredStock = await db.StockBatches.AnyAsync(x => x.ProductId == line.ProductId && x.RemainingQuantity > 0 && x.ExpiryDate <= DateOnly.FromDateTime(DateTime.UtcNow), ct);
     throw new SaleValidationException(hasExpiredStock ? $"No sellable stock for product '{line.ProductId}' because the remaining batch is expired." : $"Insufficient sellable stock for product '{line.ProductId}'.");
    }
 

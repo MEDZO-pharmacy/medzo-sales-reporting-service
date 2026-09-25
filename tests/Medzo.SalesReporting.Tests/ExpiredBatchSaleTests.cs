@@ -67,4 +67,22 @@ public sealed class ExpiredBatchSaleTests
         Assert.Equal(5, await db.StockBatches.Where(x => x.Id == expired.Id).Select(x => x.RemainingQuantity).SingleAsync());
         Assert.Equal(3, await db.StockBatches.Where(x => x.Id == sellable.Id).Select(x => x.RemainingQuantity).SingleAsync());
     }
-}
+
+    [Fact]
+    public async Task Rejects_a_batch_expiring_today_without_creating_or_deducting_a_sale()
+    {
+        var (db, connection) = await CreateDbAsync();
+        await using var _ = connection;
+        var expiringToday = Batch("p1", "EXPIRES-TODAY", DateOnly.FromDateTime(DateTime.UtcNow), 5);
+        db.StockBatches.Add(expiringToday);
+        await db.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<SaleValidationException>(() =>
+            new SaleService(db).CreateAsync(new CreateSaleRequest("expires-today", [new CreateSaleLine("p1", 1)]), CancellationToken.None));
+
+        Assert.Contains("expired", exception.Message, StringComparison.OrdinalIgnoreCase);
+        db.ChangeTracker.Clear();
+        Assert.Equal(5, await db.StockBatches.Where(x => x.Id == expiringToday.Id).Select(x => x.RemainingQuantity).SingleAsync());
+        Assert.Empty(await db.Sales.ToListAsync());
+        Assert.Empty(await db.BatchAllocations.ToListAsync());
+    }}
