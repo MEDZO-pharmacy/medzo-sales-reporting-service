@@ -29,15 +29,27 @@ public sealed class SaleItemSearchService(HttpClient catalogueClient, IHttpConte
   if (httpContextAccessor.HttpContext?.Request.Headers.Authorization.ToString() is { Length: > 0 } authorization)
    request.Headers.Authorization = AuthenticationHeaderValue.Parse(authorization);
 
-  using var response = await catalogueClient.SendAsync(request, ct);
-  if (!response.IsSuccessStatusCode) throw new SaleItemSearchUnavailableException();
+  HttpResponseMessage response;
+  try
+  {
+   response = await catalogueClient.SendAsync(request, ct);
+  }
+  catch (HttpRequestException)
+  {
+   throw new SaleItemSearchUnavailableException();
+  }
+
+  using (response)
+  {
+   if (!response.IsSuccessStatusCode) throw new SaleItemSearchUnavailableException();
 
   var catalogueResponse = await response.Content.ReadFromJsonAsync<CatalogueSearchResponse>(JsonOptions, ct) ?? throw new SaleItemSearchUnavailableException();
-  return new SaleItemSearchResponse(
-   catalogueResponse.Items.Select(item => new SaleItemSearchResult(item.Id, item.Name)).ToList(),
-   catalogueResponse.Page,
-   catalogueResponse.PageSize,
-   catalogueResponse.TotalCount);
+   return new SaleItemSearchResponse(
+    catalogueResponse.Items.Select(item => new SaleItemSearchResult(item.Id, item.Name)).ToList(),
+    catalogueResponse.Page,
+    catalogueResponse.PageSize,
+    catalogueResponse.TotalCount);
+  }
  }
 
  private sealed record CatalogueSearchResponse(IReadOnlyList<CatalogueMedicine> Items, int Page, int PageSize, int TotalCount);

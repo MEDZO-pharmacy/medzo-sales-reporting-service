@@ -39,7 +39,22 @@ public sealed class SaleItemSearchServiceTests
   await Assert.ThrowsAsync<SaleItemSearchUnavailableException>(() => service.SearchAsync("Para", 1, 20, CancellationToken.None));
  }
 
+ [Fact]
+ public async Task Returns_a_safe_error_when_catalogue_connection_is_refused()
+ {
+  var handler = new ThrowingHandler();
+  var service = new SaleItemSearchService(new HttpClient(handler) { BaseAddress = new Uri("https://catalogue.test/") }, new HttpContextAccessor());
+
+  var exception = await Assert.ThrowsAsync<SaleItemSearchUnavailableException>(() => service.SearchAsync("amox", 1, 20, CancellationToken.None));
+
+  Assert.Equal("Medicine search is temporarily unavailable. Please try again.", exception.Message);
+ }
  private static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK) { Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json") };
+ private sealed class ThrowingHandler : HttpMessageHandler
+ {
+  protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => throw new HttpRequestException("Connection refused");
+ }
+
  private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler
  {
   protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(responseFactory(request));
