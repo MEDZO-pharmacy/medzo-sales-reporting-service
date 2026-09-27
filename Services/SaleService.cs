@@ -100,6 +100,12 @@ public sealed class SaleService(SalesDbContext db, IOptions<ReceiptOptions>? rec
   return sale is null ? null : ToReceipt(sale);
  }
 
+ public async Task<SaleReceiptResponse?> GetReceiptAsync(Guid saleId, CancellationToken ct)
+ {
+  var sale = await FindByIdAsync(saleId, ct);
+  return sale is null ? null : ToReceipt(sale);
+ }
+
  static void Validate(CreateSaleRequest r)
  {
   if (string.IsNullOrWhiteSpace(r.IdempotencyKey)) throw new SaleValidationException("An idempotency key is required.");

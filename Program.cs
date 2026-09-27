@@ -7,6 +7,7 @@ var databaseProvider = builder.Configuration["Database:Provider"] ?? "Sqlite";
 var salesConnection = builder.Configuration.GetConnectionString("Sales");
 
 builder.Services.AddControllers();
+builder.Services.AddHealthChecks();
 builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<ReceiptOptions>(builder.Configuration.GetSection("Receipt"));
 builder.Services.AddHealthChecks();
