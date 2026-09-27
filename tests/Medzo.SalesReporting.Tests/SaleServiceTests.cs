@@ -4,6 +4,7 @@ using Medzo.SalesReporting.Domain;
 using Medzo.SalesReporting.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Medzo.SalesReporting.Tests;
 public sealed class SaleServiceTests
@@ -96,6 +97,33 @@ public sealed class SaleServiceTests
   Assert.Equal(3, allocation.Quantity);
  }
 
+ [Fact]
+ public async Task Stores_and_returns_required_receipt_fields_and_totals()
+ {
+  var (db, connection) = await CreateDbAsync(); await using var _ = connection;
+  db.StockBatches.Add(Batch("p1", "LOT-1", DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)), 10));
+  await db.SaveChangesAsync();
+
+  var options = Options.Create(new ReceiptOptions { PharmacyName = "Medzo Central", TaxRate = 0.15m });
+  var service = new SaleService(db, options);
+  var sale = await service.CreateAsync(new("receipt-fields", [new("p1", 3, 100m, 20m)], "Pharmacist A1234"), CancellationToken.None);
+  db.ChangeTracker.Clear();
+  var receipt = await service.GetReceiptAsync(sale.SaleId, CancellationToken.None);
+
+  Assert.NotNull(receipt);
+  Assert.StartsWith("RCT-", receipt.ReceiptNumber);
+  Assert.Equal("Medzo Central", receipt.PharmacyName);
+  Assert.Equal("Pharmacist A1234", receipt.PharmacistName);
+  Assert.Equal(0.15m, receipt.TaxRate);
+  Assert.Equal(300m, receipt.Subtotal);
+  Assert.Equal(20m, receipt.Discount);
+  Assert.Equal(42m, receipt.Tax);
+  Assert.Equal(322m, receipt.GrandTotal);
+  var item = Assert.Single(receipt.Items);
+  Assert.Equal(100m, item.UnitPrice);
+  Assert.Equal(20m, item.Discount);
+  Assert.Equal(280m, item.LineTotal);
+ }
  [Fact]
  public async Task Reuses_the_same_receipt_for_an_idempotent_sale_retry()
  {
