@@ -4,6 +4,7 @@ using Medzo.SalesReporting.Domain;
 using Medzo.SalesReporting.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Medzo.SalesReporting.Tests;
 public sealed class SaleServiceTests
@@ -38,6 +39,20 @@ public sealed class SaleServiceTests
   var expired=Batch("p1","OLD",DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),30);var zero=Batch("p1","ZERO",DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(1)),0);var valid=Batch("p1","VALID",DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)),10);db.StockBatches.AddRange(expired,zero,valid);await db.SaveChangesAsync();
   var result=await new SaleService(db).CreateAsync(new("sale-3",[new("p1",5)]),CancellationToken.None);
   Assert.Equal(valid.Id,result.Items.Single().BatchAllocations.Single().BatchId); Assert.Equal(30,await db.StockBatches.Where(x=>x.Id==expired.Id).Select(x=>x.RemainingQuantity).SingleAsync());
+ }
+
+ [Fact]
+ public async Task Does_not_sell_a_batch_that_expires_today()
+ {
+  var (db, connection) = await CreateDbAsync(); await using var _ = connection;
+  var expiresToday = Batch("p-today", "TODAY", DateOnly.FromDateTime(DateTime.UtcNow), 5);
+  db.StockBatches.Add(expiresToday); await db.SaveChangesAsync();
+
+  await Assert.ThrowsAsync<SaleValidationException>(() =>
+   new SaleService(db).CreateAsync(new("expires-today", [new("p-today", 1)]), CancellationToken.None));
+
+  db.ChangeTracker.Clear();
+  Assert.Equal(5, await db.StockBatches.Where(x => x.Id == expiresToday.Id).Select(x => x.RemainingQuantity).SingleAsync());
  }
  [Fact]
  public async Task Insufficient_stock_rolls_back_everything()
@@ -96,6 +111,33 @@ public sealed class SaleServiceTests
   Assert.Equal(3, allocation.Quantity);
  }
 
+ [Fact]
+ public async Task Stores_and_returns_required_receipt_fields_and_totals()
+ {
+  var (db, connection) = await CreateDbAsync(); await using var _ = connection;
+  db.StockBatches.Add(Batch("p1", "LOT-1", DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)), 10));
+  await db.SaveChangesAsync();
+
+  var options = Options.Create(new ReceiptOptions { PharmacyName = "Medzo Central", TaxRate = 0.15m });
+  var service = new SaleService(db, options);
+  var sale = await service.CreateAsync(new("receipt-fields", [new("p1", 3, 100m, 20m)], "Pharmacist A1234"), CancellationToken.None);
+  db.ChangeTracker.Clear();
+  var receipt = await service.GetReceiptAsync(sale.SaleId, CancellationToken.None);
+
+  Assert.NotNull(receipt);
+  Assert.StartsWith("RCT-", receipt.ReceiptNumber);
+  Assert.Equal("Medzo Central", receipt.PharmacyName);
+  Assert.Equal("Pharmacist A1234", receipt.PharmacistName);
+  Assert.Equal(0.15m, receipt.TaxRate);
+  Assert.Equal(300m, receipt.Subtotal);
+  Assert.Equal(20m, receipt.Discount);
+  Assert.Equal(42m, receipt.Tax);
+  Assert.Equal(322m, receipt.GrandTotal);
+  var item = Assert.Single(receipt.Items);
+  Assert.Equal(100m, item.UnitPrice);
+  Assert.Equal(20m, item.Discount);
+  Assert.Equal(280m, item.LineTotal);
+ }
  [Fact]
  public async Task Reuses_the_same_receipt_for_an_idempotent_sale_retry()
  {
