@@ -18,7 +18,7 @@ public sealed class ExpiryAlertService(SalesDbContext db) : IExpiryAlertService
         pageSize = Math.Clamp(pageSize, 1, 100);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var deadline = today.AddDays(withinDays);
-        var query = db.StockBatches.AsNoTracking().Where(batch => batch.RemainingQuantity > 0 && batch.ExpiryDate >= today && batch.ExpiryDate <= deadline);
+        var query = db.StockBatches.AsNoTracking().Where(batch => !batch.IsRemoved && batch.RemainingQuantity > 0 && batch.ExpiryDate >= today && batch.ExpiryDate <= deadline);
         var total = await query.CountAsync(ct);
         var batches = await query.OrderBy(batch => batch.ExpiryDate).ThenBy(batch => batch.CreatedAtUtc).ThenBy(batch => batch.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
         var items = batches.Select(batch => new NearExpiryBatchResponse(batch.Id, batch.ProductId, batch.BatchNumber, batch.ExpiryDate, batch.ExpiryDate.DayNumber - today.DayNumber, batch.RemainingQuantity)).ToList();

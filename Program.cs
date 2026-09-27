@@ -34,6 +34,7 @@ builder.Services.AddDbContext<SalesDbContext>(options =>
 });
 builder.Services.AddScoped<ISaleService, SaleService>();
 builder.Services.AddScoped<IExpiryAlertService, ExpiryAlertService>();
+builder.Services.AddScoped<IBatchRemovalService, BatchRemovalService>();
 builder.Services.AddHttpClient<ISaleItemSearchService, SaleItemSearchService>(client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Services:CatalogueInventory:BaseUrl"] ?? "http://localhost:5082");

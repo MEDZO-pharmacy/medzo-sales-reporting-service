@@ -27,6 +27,28 @@ public static class SalesReceiptSchemaUpgrader
    ["UnitPrice"] = IsSqlite(provider) ? "TEXT NOT NULL DEFAULT '0'" : "decimal(18,2) NOT NULL DEFAULT 0",
    ["DiscountAmount"] = IsSqlite(provider) ? "TEXT NOT NULL DEFAULT '0'" : "decimal(18,2) NOT NULL DEFAULT 0",
   }, ct);
+
+  await AddMissingColumnsAsync(connection, "StockBatches", new Dictionary<string, string>
+  {
+   ["IsRemoved"] = IsMySql(provider) ? "tinyint(1) NOT NULL DEFAULT 0" : IsSqlServer(provider) ? "bit NOT NULL DEFAULT 0" : "INTEGER NOT NULL DEFAULT 0",
+   ["RemovedAtUtc"] = IsMySql(provider) ? "datetime(6) NULL" : IsSqlServer(provider) ? "datetime2 NULL" : "TEXT NULL",
+   ["RemovedBy"] = IsMySql(provider) ? "varchar(128) NULL" : IsSqlServer(provider) ? "nvarchar(128) NULL" : "TEXT NULL",
+   ["RemovalReason"] = IsMySql(provider) ? "varchar(500) NULL" : IsSqlServer(provider) ? "nvarchar(500) NULL" : "TEXT NULL",
+  }, ct);
+
+  await EnsureBatchRemovalAuditTableAsync(connection, provider, ct);
+ }
+
+ private static async Task EnsureBatchRemovalAuditTableAsync(DbConnection connection, string provider, CancellationToken ct)
+ {
+  var sql = IsSqlServer(provider)
+   ? "IF OBJECT_ID(N'[BatchRemovalAudits]', N'U') IS NULL CREATE TABLE [BatchRemovalAudits] ([Id] nvarchar(36) NOT NULL PRIMARY KEY, [BatchId] nvarchar(36) NOT NULL, [ProductId] nvarchar(max) NOT NULL, [BatchNumber] nvarchar(max) NOT NULL, [RemovedQuantity] int NOT NULL, [Reason] nvarchar(500) NOT NULL, [RemovedBy] nvarchar(128) NOT NULL, [RemovedAtUtc] datetime2 NOT NULL); IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_BatchRemovalAudits_BatchId' AND object_id = OBJECT_ID(N'[BatchRemovalAudits]')) CREATE UNIQUE INDEX [IX_BatchRemovalAudits_BatchId] ON [BatchRemovalAudits] ([BatchId]);"
+   : IsMySql(provider)
+    ? "CREATE TABLE IF NOT EXISTS `BatchRemovalAudits` (`Id` char(36) NOT NULL PRIMARY KEY, `BatchId` char(36) NOT NULL, `ProductId` longtext NOT NULL, `BatchNumber` longtext NOT NULL, `RemovedQuantity` int NOT NULL, `Reason` varchar(500) NOT NULL, `RemovedBy` varchar(128) NOT NULL, `RemovedAtUtc` datetime(6) NOT NULL, UNIQUE KEY `IX_BatchRemovalAudits_BatchId` (`BatchId`));"
+    : "CREATE TABLE IF NOT EXISTS \"BatchRemovalAudits\" (\"Id\" TEXT NOT NULL PRIMARY KEY, \"BatchId\" TEXT NOT NULL, \"ProductId\" TEXT NOT NULL, \"BatchNumber\" TEXT NOT NULL, \"RemovedQuantity\" INTEGER NOT NULL, \"Reason\" TEXT NOT NULL, \"RemovedBy\" TEXT NOT NULL, \"RemovedAtUtc\" TEXT NOT NULL); CREATE UNIQUE INDEX IF NOT EXISTS \"IX_BatchRemovalAudits_BatchId\" ON \"BatchRemovalAudits\" (\"BatchId\");";
+  await using var command = connection.CreateCommand();
+  command.CommandText = sql;
+  await command.ExecuteNonQueryAsync(ct);
  }
 
  private static async Task AddMissingColumnsAsync(DbConnection connection, string table, IReadOnlyDictionary<string, string> columns, CancellationToken ct)

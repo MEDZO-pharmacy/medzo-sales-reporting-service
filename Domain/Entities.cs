@@ -8,6 +8,10 @@ public sealed class StockBatch
  public DateOnly ExpiryDate { get; set; }
  public int RemainingQuantity { get; set; }
  public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+ public bool IsRemoved { get; set; }
+ public DateTime? RemovedAtUtc { get; set; }
+ public string? RemovedBy { get; set; }
+ public string? RemovalReason { get; set; }
 }
 
 public sealed class Sale
@@ -42,4 +46,16 @@ public sealed class BatchAllocation
  public Guid StockBatchId { get; set; }
  public StockBatch? StockBatch { get; set; }
  public int Quantity { get; set; }
+}
+
+public sealed class BatchRemovalAudit
+{
+ public Guid Id { get; set; } = Guid.NewGuid();
+ public Guid BatchId { get; set; }
+ public required string ProductId { get; set; }
+ public required string BatchNumber { get; set; }
+ public int RemovedQuantity { get; set; }
+ public required string Reason { get; set; }
+ public required string RemovedBy { get; set; }
+ public DateTime RemovedAtUtc { get; set; }
 }
