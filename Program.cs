@@ -8,6 +8,7 @@ var salesConnection = builder.Configuration.GetConnectionString("Sales");
 
 builder.Services.AddControllers();
 builder.Services.AddHealthChecks();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddDbContext<SalesDbContext>(options =>
 {
     if (databaseProvider.Equals("MySql", StringComparison.OrdinalIgnoreCase))
@@ -22,6 +23,10 @@ builder.Services.AddDbContext<SalesDbContext>(options =>
     options.UseSqlite(salesConnection ?? "Data Source=medzo-sales.db");
 });
 builder.Services.AddScoped<ISaleService, SaleService>();
+builder.Services.AddHttpClient<ISaleItemSearchService, SaleItemSearchService>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:CatalogueInventory:BaseUrl"] ?? "http://localhost:5082");
+});
 
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
