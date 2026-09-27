@@ -15,7 +15,8 @@ public sealed class SalesDbContext(DbContextOptions<SalesDbContext> options) : D
  {
   var guidAsText = new GuidToStringConverter();
   var isMySql = Database.ProviderName?.Contains("MySql", StringComparison.OrdinalIgnoreCase) == true;
-  var guidColumnType = isMySql ? "char(36)" : "TEXT";
+  var isSqlServer = Database.ProviderName?.Contains("SqlServer", StringComparison.OrdinalIgnoreCase) == true;
+  var guidColumnType = isMySql ? "char(36)" : isSqlServer ? "nvarchar(36)" : "TEXT";
 
   b.Entity<StockBatch>(entity =>
   {
@@ -26,6 +27,10 @@ public sealed class SalesDbContext(DbContextOptions<SalesDbContext> options) : D
   {
    entity.Property(x => x.Id).HasConversion(guidAsText).HasColumnType(guidColumnType);
    entity.Property(x => x.IdempotencyKey).HasMaxLength(128);
+   entity.Property(x => x.ReceiptNumber).HasMaxLength(64);
+   entity.Property(x => x.PharmacyName).HasMaxLength(200);
+   entity.Property(x => x.PharmacistName).HasMaxLength(200);
+   entity.Property(x => x.TaxRate).HasPrecision(8, 4);
    entity.HasIndex(x => x.IdempotencyKey).IsUnique();
    entity.HasMany(x => x.Items).WithOne(x => x.Sale).HasForeignKey(x => x.SaleId);
   });
@@ -33,6 +38,8 @@ public sealed class SalesDbContext(DbContextOptions<SalesDbContext> options) : D
   {
    entity.Property(x => x.Id).HasConversion(guidAsText).HasColumnType(guidColumnType);
    entity.Property(x => x.SaleId).HasConversion(guidAsText).HasColumnType(guidColumnType);
+   entity.Property(x => x.UnitPrice).HasPrecision(18, 2);
+   entity.Property(x => x.DiscountAmount).HasPrecision(18, 2);
    entity.HasMany(x => x.Allocations).WithOne(x => x.SaleItem).HasForeignKey(x => x.SaleItemId);
   });
   b.Entity<BatchAllocation>(entity =>
