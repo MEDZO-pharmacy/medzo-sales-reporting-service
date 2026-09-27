@@ -7,9 +7,9 @@ var databaseProvider = builder.Configuration["Database:Provider"] ?? "Sqlite";
 var salesConnection = builder.Configuration.GetConnectionString("Sales");
 
 builder.Services.AddControllers();
+builder.Services.AddHealthChecks();
 builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<ReceiptOptions>(builder.Configuration.GetSection("Receipt"));
-builder.Services.AddHealthChecks();
 builder.Services.AddDbContext<SalesDbContext>(options =>
 {
     if (databaseProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) || databaseProvider.Equals("AzureSql", StringComparison.OrdinalIgnoreCase))
