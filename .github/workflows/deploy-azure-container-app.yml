@@ -104,6 +104,20 @@ jobs:
           registryUrl: ${{ env.REGISTRY }}
           registryUsername: ${{ secrets.GHCR_USERNAME }}
           registryPassword: ${{ secrets.GHCR_TOKEN }}
+          environmentVariables: >-
+            ASPNETCORE_ENVIRONMENT=Production
+            Services__CatalogueInventory__BaseUrl=https://medzo-catalogue-service.agreeableglacier-37cd3268.centralindia.azurecontainerapps.io
+            Cors__AllowedOrigins__0=https://brave-forest-045498500.3.azurestaticapps.net
+
+      - name: Keep consumption scaling within student-credit budget
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            min=$(az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.RESOURCE_GROUP }}" --query 'properties.template.scale.minReplicas' --output tsv)
+            max=$(az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.RESOURCE_GROUP }}" --query 'properties.template.scale.maxReplicas' --output tsv)
+            if [ "$min" != "0" ] || [ "$max" != "1" ]; then
+              az containerapp update --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.RESOURCE_GROUP }}" --min-replicas 0 --max-replicas 1
+            fi
 
       - name: Verify deployed health endpoint
         uses: azure/cli@v2
