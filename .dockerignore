@@ -1,0 +1,28 @@
+# Source-control and editor metadata
+.git
+.gitignore
+.github
+.vs
+.vscode
+.idea
+
+# Local secrets must never enter a Docker build context
+.env
+.env.*
+
+# Local build, test, and dependency output
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/TestResults
+tests
+
+# Local-only files and databases
+*.user
+*.suo
+*.log
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
