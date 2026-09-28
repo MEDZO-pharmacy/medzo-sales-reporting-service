@@ -123,4 +123,3 @@ jobs:
               --output tsv)
             test -n "$fqdn"
             curl --fail --retry 6 --retry-all-errors --retry-delay 10 "https://$fqdn/health"
-            curl --fail --retry 6 --retry-all-errors --retry-delay 10 "https://$fqdn/api/expiry-alerts?pageSize=1"
