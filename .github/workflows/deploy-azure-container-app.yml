@@ -78,15 +78,11 @@ jobs:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
           set -euo pipefail
           : "${AZURE_CLIENT_ID:?Add repository Actions variable AZURE_CLIENT_ID}"
           : "${AZURE_TENANT_ID:?Add repository Actions variable AZURE_TENANT_ID}"
           : "${AZURE_SUBSCRIPTION_ID:?Add repository Actions variable AZURE_SUBSCRIPTION_ID}"
-          : "${GHCR_USERNAME:?Add repository Actions secret GHCR_USERNAME}"
-          : "${GHCR_TOKEN:?Add repository Actions secret GHCR_TOKEN}"
 
       - name: Log in to Azure using OpenID Connect
         uses: azure/login@v2
@@ -95,29 +91,26 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy image to Azure Container Apps
-        uses: azure/container-apps-deploy-action@v1
-        with:
-          containerAppName: ${{ env.CONTAINER_APP_NAME }}
-          resourceGroup: ${{ env.RESOURCE_GROUP }}
-          imageToDeploy: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          registryUrl: ${{ env.REGISTRY }}
-          registryUsername: ${{ secrets.GHCR_USERNAME }}
-          registryPassword: ${{ secrets.GHCR_TOKEN }}
-          environmentVariables: >-
-            ASPNETCORE_ENVIRONMENT=Production
-            Services__CatalogueInventory__BaseUrl=https://medzo-catalogue-service.agreeableglacier-37cd3268.centralindia.azurecontainerapps.io
-            Cors__AllowedOrigins__0=https://brave-forest-045498500.3.azurestaticapps.net
-
-      - name: Keep consumption scaling within student-credit budget
+      # The existing Sales app already has a GHCR pull secret. Updating the image
+      # directly avoids registry-set trying to reprovision its old :latest image.
+      - name: Deploy immutable image to existing Sales Container App
         uses: azure/cli@v2
         with:
           inlineScript: |
-            min=$(az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.RESOURCE_GROUP }}" --query 'properties.template.scale.minReplicas' --output tsv)
-            max=$(az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.RESOURCE_GROUP }}" --query 'properties.template.scale.maxReplicas' --output tsv)
-            if [ "$min" != "0" ] || [ "$max" != "1" ]; then
-              az containerapp update --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.RESOURCE_GROUP }}" --min-replicas 0 --max-replicas 1
-            fi
+            az containerapp update \
+              --name "${{ env.CONTAINER_APP_NAME }}" \
+              --resource-group "${{ env.RESOURCE_GROUP }}" \
+              --image "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" \
+              --cpu 0.5 --memory 1Gi \
+              --min-replicas 0 --max-replicas 1 \
+              --scale-rule-name http-scaler --scale-rule-http-concurrency 10 \
+              --set-env-vars \
+                ASPNETCORE_ENVIRONMENT=Production \
+                Database__Provider=SqlServer \
+                ConnectionStrings__Sales=secretref:sales-db-connection \
+                Services__CatalogueInventory__BaseUrl=https://medzo-catalogue-service.agreeableglacier-37cd3268.centralindia.azurecontainerapps.io \
+                Cors__AllowedOrigins__0=https://brave-forest-045498500.3.azurestaticapps.net \
+              --output none
 
       - name: Verify deployed health endpoint
         uses: azure/cli@v2
@@ -130,3 +123,4 @@ jobs:
               --output tsv)
             test -n "$fqdn"
             curl --fail --retry 6 --retry-all-errors --retry-delay 10 "https://$fqdn/health"
+            curl --fail --retry 6 --retry-all-errors --retry-delay 10 "https://$fqdn/api/expiry-alerts?pageSize=1"
