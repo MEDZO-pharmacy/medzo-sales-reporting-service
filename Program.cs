@@ -60,8 +60,10 @@ using (var scope = app.Services.CreateScope())
     // EnsureCreated is intentionally limited to local SQLite development.
     // Never create an Azure SQL database/schema implicitly at container startup.
     if (salesDb.Database.IsSqlite() && !app.Environment.IsProduction())
+    {
         await salesDb.Database.EnsureCreatedAsync();
-    await salesDb.EnsureReceiptColumnsAsync();
+        await salesDb.EnsureReceiptColumnsAsync();
+    }
 }
 
 app.UseHttpsRedirection();
