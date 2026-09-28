@@ -5,8 +5,15 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 var databaseProvider = builder.Configuration["Database:Provider"] ?? "Sqlite";
 var salesConnection = builder.Configuration.GetConnectionString("Sales");
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 
 builder.Services.AddControllers();
+builder.Services.AddHealthChecks();
+if (corsOrigins.Length > 0)
+{
+    builder.Services.AddCors(options => options.AddPolicy("frontend", policy =>
+        policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
+}
 builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<ReceiptOptions>(builder.Configuration.GetSection("Receipt"));
 builder.Services.AddDbContext<SalesDbContext>(options =>
@@ -48,6 +55,8 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseHttpsRedirection();
+if (corsOrigins.Length > 0)
+    app.UseCors("frontend");
 app.MapControllers();
 app.MapHealthChecks("/health");
 app.Run();

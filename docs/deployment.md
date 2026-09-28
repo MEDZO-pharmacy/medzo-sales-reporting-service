@@ -28,7 +28,7 @@ Before promoting the deployment files to `main`, verify that the application:
 - supports `Database__Provider=SqlServer`;
 - reads `ConnectionStrings__Sales`;
 - applies a controlled EF Core migration for Azure SQL;
-- exposes `/health`, `/health/live`, and `/health/ready`;
+- exposes `/health`;
 - listens on port 8080;
 - reads the Catalogue service URL from configuration;
 - validates Auth service JWTs using environment-provided settings; and
@@ -70,13 +70,12 @@ Jwt__Secret=secretref:jwt-signing-secret
 Jwt__Issuer=MedzoAuthService
 Jwt__Audience=MedzoClient
 Kafka__Enabled=false
+Cors__AllowedOrigins__0=https://<your-frontend>.azurestaticapps.net
 ```
 
-Configure HTTP health probes on port 8080:
-
-- startup: `/health/live`
-- liveness: `/health/live`
-- readiness: `/health/ready`
+Configure HTTP health probes on port 8080 using `/health` for startup,
+liveness, and readiness. The application currently exposes that single health
+endpoint.
 
 ## First deployment order
 
