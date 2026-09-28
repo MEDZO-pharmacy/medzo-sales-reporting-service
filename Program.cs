@@ -7,6 +7,13 @@ var databaseProvider = builder.Configuration["Database:Provider"] ?? "Sqlite";
 var salesConnection = builder.Configuration.GetConnectionString("Sales");
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 
+// Production must use the pre-provisioned Azure SQL database. Do not silently
+// fall back to SQLite or attempt to create a database from the API container.
+if (builder.Environment.IsProduction() &&
+    !databaseProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) &&
+    !databaseProvider.Equals("AzureSql", StringComparison.OrdinalIgnoreCase))
+    throw new InvalidOperationException("Production requires Database:Provider=SqlServer and the existing Azure SQL connection.");
+
 builder.Services.AddControllers();
 builder.Services.AddHealthChecks();
 if (corsOrigins.Length > 0)
@@ -50,7 +57,10 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var salesDb = scope.ServiceProvider.GetRequiredService<SalesDbContext>();
-    await salesDb.Database.EnsureCreatedAsync();
+    // EnsureCreated is intentionally limited to local SQLite development.
+    // Never create an Azure SQL database/schema implicitly at container startup.
+    if (salesDb.Database.IsSqlite() && !app.Environment.IsProduction())
+        await salesDb.Database.EnsureCreatedAsync();
     await salesDb.EnsureReceiptColumnsAsync();
 }
 
