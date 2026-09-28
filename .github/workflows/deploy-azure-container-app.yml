@@ -78,11 +78,15 @@ jobs:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
           set -euo pipefail
           : "${AZURE_CLIENT_ID:?Add repository Actions variable AZURE_CLIENT_ID}"
           : "${AZURE_TENANT_ID:?Add repository Actions variable AZURE_TENANT_ID}"
           : "${AZURE_SUBSCRIPTION_ID:?Add repository Actions variable AZURE_SUBSCRIPTION_ID}"
+          : "${GHCR_USERNAME:?Add repository Actions secret GHCR_USERNAME}"
+          : "${GHCR_TOKEN:?Add repository Actions secret GHCR_TOKEN}"
 
       - name: Log in to Azure using OpenID Connect
         uses: azure/login@v2
@@ -98,6 +102,8 @@ jobs:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
           imageToDeploy: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           registryUrl: ${{ env.REGISTRY }}
+          registryUsername: ${{ secrets.GHCR_USERNAME }}
+          registryPassword: ${{ secrets.GHCR_TOKEN }}
 
       - name: Verify deployed health endpoint
         uses: azure/cli@v2
