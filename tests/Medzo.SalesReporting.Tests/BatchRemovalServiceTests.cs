@@ -58,7 +58,14 @@ public sealed class BatchRemovalServiceTests
         var (db, connection) = await CreateDbAsync();
         await using var _ = connection;
         var batch = Batch(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5)));
-        var sale = new Sale { IdempotencyKey = "past-sale" };
+        var sale = new Sale
+        {
+            IdempotencyKey = "past-sale",
+            ReceiptNumber = "RCT-PAST-SALE",
+            PharmacyName = "Medzo",
+            PharmacistName = "I1001",
+            TaxRate = 0m
+        };
         var item = new SaleItem { Sale = sale, ProductId = "p1", Quantity = 2 };
         item.Allocations.Add(new BatchAllocation { StockBatch = batch, Quantity = 2 });
         sale.Items.Add(item);
