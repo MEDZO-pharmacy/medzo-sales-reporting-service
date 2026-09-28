@@ -19,7 +19,10 @@ else
     optionsBuilder.UseSqlServer(connectionString, sqlServer => sqlServer.EnableRetryOnFailure());
 
 await using var database = new SalesDbContext(optionsBuilder.Options);
-await database.Database.EnsureCreatedAsync();
+if (database.Database.IsSqlite())
+    await database.Database.EnsureCreatedAsync();
+else
+    throw new InvalidOperationException("The sample-data seeder refuses to create or initialize a remote SQL database. Use an existing local SQLite database only.");
 await database.EnsureReceiptColumnsAsync();
 
 var now = DateTime.UtcNow;
