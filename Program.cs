@@ -1,6 +1,7 @@
 using Medzo.SalesReporting.Data;
 using Medzo.SalesReporting.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 var databaseProvider = builder.Configuration["Database:Provider"] ?? "Sqlite";
@@ -15,6 +16,23 @@ if (builder.Environment.IsProduction() &&
     throw new InvalidOperationException("Production requires Database:Provider=SqlServer and the existing Azure SQL connection.");
 
 builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "Medzo Sales and Reporting API", Version = "v1" });
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "Enter a Medzo JWT bearer token.", Name = "Authorization", In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT"
+    });
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecurityScheme
+        {
+            Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+        }] = Array.Empty<string>()
+    });
+});
 builder.Services.AddHealthChecks();
 if (corsOrigins.Length > 0)
 {
@@ -69,6 +87,8 @@ using (var scope = app.Services.CreateScope())
 app.UseHttpsRedirection();
 if (corsOrigins.Length > 0)
     app.UseCors("frontend");
+app.UseSwagger();
+app.UseSwaggerUI(options => options.SwaggerEndpoint("/swagger/v1/swagger.json", "Medzo Sales and Reporting API v1"));
 app.MapControllers();
 app.MapHealthChecks("/health");
 app.Run();
