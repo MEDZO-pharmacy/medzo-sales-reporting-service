@@ -15,7 +15,16 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Run xUnit and Moq tests with Coverlet coverage
-        run: dotnet test tests/Medzo.SalesReporting.Tests/Medzo.SalesReporting.Tests.csproj --collect:"XPlat Code Coverage" --results-directory TestResults
+        run: dotnet test tests/Medzo.SalesReporting.Tests/Medzo.SalesReporting.Tests.csproj --collect:"XPlat Code Coverage" --logger "trx;LogFileName=results.trx" --results-directory TestResults
+      - name: Add xUnit test summary
+        if: always()
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem -Recurse TestResults -Filter results.trx | Select-Object -First 1
+          if (-not $trx) { "## xUnit Test Report`n`nNo TRX result file was generated." | Add-Content $env:GITHUB_STEP_SUMMARY; exit 0 }
+          [xml]$report = Get-Content $trx.FullName
+          $counters = $report.TestRun.ResultSummary.Counters
+          "## xUnit Test Report`n`n| Total | Passed | Failed | Skipped |`n| ---: | ---: | ---: | ---: |`n| $($counters.total) | $($counters.passed) | $($counters.failed) | $($counters.notExecuted) |`n`nCoverlet coverage is included in the downloadable artifact." | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Upload test and coverage evidence
         if: always()
         uses: actions/upload-artifact@v4
