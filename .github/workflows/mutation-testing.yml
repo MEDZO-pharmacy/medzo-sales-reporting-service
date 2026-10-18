@@ -1,0 +1,76 @@
+name: Sales Service Mutation Testing
+
+on:
+  push:
+    branches:
+      - sales-mutation-testing
+    paths:
+      - '.config/dotnet-tools.json'
+      - '.github/workflows/mutation-testing.yml'
+      - 'Services/**'
+      - 'tests/**'
+      - 'medzo-sales-reporting-service.csproj'
+      - 'Medzo.SalesReporting.slnx'
+      - 'stryker-config.json'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.config/dotnet-tools.json'
+      - '.github/workflows/mutation-testing.yml'
+      - 'Services/**'
+      - 'tests/**'
+      - 'medzo-sales-reporting-service.csproj'
+      - 'Medzo.SalesReporting.slnx'
+      - 'stryker-config.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutation-test:
+    name: Stryker.NET quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore tools and dependencies
+        run: |
+          dotnet tool restore
+          dotnet restore Medzo.SalesReporting.slnx
+
+      - name: Run unit tests
+        run: dotnet test Medzo.SalesReporting.slnx --configuration Release --no-restore
+
+      - name: Run mutation tests
+        run: dotnet stryker --config-file stryker-config.json
+
+      - name: Add mutation summary
+        if: always()
+        shell: bash
+        run: |
+          report=$(find StrykerOutput -type f -name mutation-report.md | sort | tail -n 1)
+          if [ -n "$report" ]; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload HTML, JSON, and Markdown reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sales-mutation-reports-${{ github.run_number }}
+          path: |
+            StrykerOutput/**/reports/mutation-report.html
+            StrykerOutput/**/reports/mutation-report.json
+            StrykerOutput/**/reports/mutation-report.md
+          if-no-files-found: error
+          retention-days: 14
