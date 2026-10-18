@@ -31,6 +31,46 @@ public sealed class BatchRemovalServiceTests
     static RemoveBatchRequest Request(string key = "remove-1") => new(key, "Expired", "I1001");
 
     [Fact]
+    public async Task Candidate_search_clamps_inputs_and_filters_unsuitable_batches()
+    {
+        var (db, connection) = await CreateDbAsync();
+        await using var _ = connection;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        db.StockBatches.AddRange(
+            Batch(today.AddDays(-1)),
+            Batch(today),
+            Batch(today.AddDays(1)),
+            Batch(today.AddDays(2)),
+            new StockBatch { ProductId = "removed", BatchNumber = "REMOVED", ExpiryDate = today, RemainingQuantity = 5, IsRemoved = true },
+            Batch(today, 0));
+        await db.SaveChangesAsync();
+
+        var result = await new BatchRemovalService(db).GetCandidatesAsync(0, 0, 150, CancellationToken.None);
+
+        Assert.Equal(1, result.Page);
+        Assert.Equal(100, result.PageSize);
+        Assert.Equal(3, result.TotalCount);
+        Assert.Equal([-1, 0, 1], result.Items.Select(item => item.DaysUntilExpiry));
+        Assert.True(result.Items[0].IsExpired);
+        Assert.False(result.Items[1].IsExpired);
+    }
+
+    [Theory]
+    [InlineData("", "Expired", "I1001", "idempotency key")]
+    [InlineData("remove-1", " ", "I1001", "reason")]
+    [InlineData("remove-1", "Expired", " ", "identity")]
+    public async Task Rejects_incomplete_removal_requests(string key, string reason, string removedBy, string expectedMessage)
+    {
+        var (db, connection) = await CreateDbAsync();
+        await using var _ = connection;
+
+        var exception = await Assert.ThrowsAsync<BatchRemovalValidationException>(() =>
+            new BatchRemovalService(db).RemoveAsync(Guid.NewGuid(), new RemoveBatchRequest(key, reason, removedBy), CancellationToken.None));
+
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Removes_an_expired_batch_and_records_a_single_audit_entry()
     {
         var (db, connection) = await CreateDbAsync();

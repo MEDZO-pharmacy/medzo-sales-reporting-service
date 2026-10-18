@@ -16,6 +16,27 @@ public sealed class SaleServiceTests
   var db=new SalesDbContext(options); await db.Database.EnsureCreatedAsync(); return(db,connection);
  }
  static StockBatch Batch(string product,string number,DateOnly expiry,int quantity,DateTime? created=null)=>new(){ProductId=product,BatchNumber=number,ExpiryDate=expiry,RemainingQuantity=quantity,CreatedAtUtc=created??DateTime.UtcNow};
+
+ [Fact]
+ public async Task Rejects_invalid_sale_requests()
+ {
+  var (db, connection) = await CreateDbAsync(); await using var _ = connection;
+  var valid = new CreateSaleLine("p1", 1, 10m, 0m);
+  CreateSaleRequest[] invalidRequests =
+  [
+   new("", [valid]),
+   new("empty", []),
+   new("missing-product", [valid, new(" ", 1)]),
+   new("zero-quantity", [valid, new("p2", 0)]),
+   new("negative-price", [valid, new("p2", 1, -1m)]),
+   new("negative-discount", [valid, new("p2", 1, 10m, -1m)]),
+   new("excessive-discount", [valid, new("p2", 1, 10m, 11m)]),
+   new("duplicate", [valid, new("p1", 2)])
+  ];
+
+  foreach (var request in invalidRequests)
+   await Assert.ThrowsAsync<SaleValidationException>(() => new SaleService(db).CreateAsync(request, CancellationToken.None));
+ }
  [Fact]
  public async Task Uses_earliest_expiry_batch_first()
  {
@@ -48,9 +69,10 @@ public sealed class SaleServiceTests
   var expiresToday = Batch("p-today", "TODAY", DateOnly.FromDateTime(DateTime.UtcNow), 5);
   db.StockBatches.Add(expiresToday); await db.SaveChangesAsync();
 
-  await Assert.ThrowsAsync<SaleValidationException>(() =>
+  var exception = await Assert.ThrowsAsync<SaleValidationException>(() =>
    new SaleService(db).CreateAsync(new("expires-today", [new("p-today", 1)]), CancellationToken.None));
 
+  Assert.Contains("expired", exception.Message, StringComparison.OrdinalIgnoreCase);
   db.ChangeTracker.Clear();
   Assert.Equal(5, await db.StockBatches.Where(x => x.Id == expiresToday.Id).Select(x => x.RemainingQuantity).SingleAsync());
  }
@@ -59,7 +81,8 @@ public sealed class SaleServiceTests
  {
   var (db,connection)=await CreateDbAsync(); await using var _=connection;
   var batch=Batch("p1","A",DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)),10);db.StockBatches.Add(batch);await db.SaveChangesAsync();
-  await Assert.ThrowsAsync<SaleValidationException>(()=>new SaleService(db).CreateAsync(new("sale-4",[new("p1",11)]),CancellationToken.None));
+  var exception = await Assert.ThrowsAsync<SaleValidationException>(()=>new SaleService(db).CreateAsync(new("sale-4",[new("p1",11)]),CancellationToken.None));
+  Assert.Contains("Insufficient sellable stock", exception.Message);
   db.ChangeTracker.Clear(); Assert.Equal(10,await db.StockBatches.Where(x=>x.Id==batch.Id).Select(x=>x.RemainingQuantity).SingleAsync()); Assert.Empty(await db.Sales.ToListAsync()); Assert.Empty(await db.BatchAllocations.ToListAsync());
  }
  [Fact]
@@ -103,6 +126,8 @@ public sealed class SaleServiceTests
   Assert.NotNull(receipt);
   Assert.Equal(sale.SaleId, receipt.SaleId);
   Assert.Equal(sale.Receipt.CompletedAtUtc, receipt.CompletedAtUtc);
+  Assert.Equal("Medzo Pharmacy", receipt.PharmacyName);
+  Assert.Equal("Not recorded", receipt.PharmacistName);
   var item = Assert.Single(receipt.Items);
   Assert.Equal("p1", item.ProductId);
   Assert.Equal(3, item.Quantity);
@@ -115,12 +140,14 @@ public sealed class SaleServiceTests
  public async Task Stores_and_returns_required_receipt_fields_and_totals()
  {
   var (db, connection) = await CreateDbAsync(); await using var _ = connection;
-  db.StockBatches.Add(Batch("p1", "LOT-1", DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)), 10));
+  db.StockBatches.AddRange(
+   Batch("p1", "LOT-1", DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)), 10),
+   Batch("p2", "LOT-2", DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(3)), 10));
   await db.SaveChangesAsync();
 
-  var options = Options.Create(new ReceiptOptions { PharmacyName = "Medzo Central", TaxRate = 0.15m });
+  var options = Options.Create(new ReceiptOptions { PharmacyName = " Medzo Central ", TaxRate = 0.15m });
   var service = new SaleService(db, options);
-  var sale = await service.CreateAsync(new("receipt-fields", [new("p1", 3, 100m, 20m)], "Pharmacist A1234"), CancellationToken.None);
+  var sale = await service.CreateAsync(new("receipt-fields", [new("p1", 3, 100m, 20m), new("p2", 2, 50m, 5m)], "Pharmacist A1234"), CancellationToken.None);
   db.ChangeTracker.Clear();
   var receipt = await service.GetReceiptAsync(sale.SaleId, CancellationToken.None);
 
@@ -129,14 +156,29 @@ public sealed class SaleServiceTests
   Assert.Equal("Medzo Central", receipt.PharmacyName);
   Assert.Equal("Pharmacist A1234", receipt.PharmacistName);
   Assert.Equal(0.15m, receipt.TaxRate);
-  Assert.Equal(300m, receipt.Subtotal);
-  Assert.Equal(20m, receipt.Discount);
-  Assert.Equal(42m, receipt.Tax);
-  Assert.Equal(322m, receipt.GrandTotal);
-  var item = Assert.Single(receipt.Items);
+  Assert.Equal(400m, receipt.Subtotal);
+  Assert.Equal(25m, receipt.Discount);
+  Assert.Equal(56.25m, receipt.Tax);
+  Assert.Equal(431.25m, receipt.GrandTotal);
+  Assert.Equal(2, receipt.Items.Count);
+  var item = receipt.Items.Single(receiptItem => receiptItem.ProductId == "p1");
   Assert.Equal(100m, item.UnitPrice);
   Assert.Equal(20m, item.Discount);
   Assert.Equal(280m, item.LineTotal);
+ }
+
+ [Fact]
+ public async Task Uses_creation_time_to_break_equal_expiry_ties()
+ {
+  var (db, connection) = await CreateDbAsync(); await using var _ = connection;
+  var expiry = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2));
+  var older = Batch("p1", "OLDER", expiry, 3, DateTime.UtcNow.AddMinutes(-5));
+  var newer = Batch("p1", "NEWER", expiry, 3, DateTime.UtcNow);
+  db.StockBatches.AddRange(newer, older); await db.SaveChangesAsync();
+
+  var sale = await new SaleService(db).CreateAsync(new("tie-break", [new("p1", 2)]), CancellationToken.None);
+
+  Assert.Equal(older.Id, Assert.Single(sale.Items.Single().BatchAllocations).BatchId);
  }
  [Fact]
  public async Task Reuses_the_same_receipt_for_an_idempotent_sale_retry()

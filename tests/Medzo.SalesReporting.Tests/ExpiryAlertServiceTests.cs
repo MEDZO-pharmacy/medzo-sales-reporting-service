@@ -49,4 +49,25 @@ public sealed class ExpiryAlertServiceTests
         Assert.Equal(first.Items.Single().BatchId, retry.Items.Single().BatchId);
         Assert.Equal(7, await db.StockBatches.Select(batch => batch.RemainingQuantity).SingleAsync(CancellationToken.None));
     }
+
+    [Fact]
+    public async Task Includes_window_boundaries_and_applies_pagination()
+    {
+        var (db, connection) = await CreateDbAsync(); await using var _ = connection;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        db.StockBatches.AddRange(
+            new StockBatch { ProductId = "p1", BatchNumber = "TODAY", ExpiryDate = today, RemainingQuantity = 2 },
+            new StockBatch { ProductId = "p2", BatchNumber = "TOMORROW", ExpiryDate = today.AddDays(1), RemainingQuantity = 2 },
+            new StockBatch { ProductId = "p3", BatchNumber = "TOO-LATE", ExpiryDate = today.AddDays(2), RemainingQuantity = 2 });
+        await db.SaveChangesAsync();
+
+        var result = await new ExpiryAlertService(db).GetNearExpiryAsync(0, 2, 1, CancellationToken.None);
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(2, result.Page);
+        Assert.Equal(1, result.PageSize);
+        var item = Assert.Single(result.Items);
+        Assert.Equal("TOMORROW", item.BatchNumber);
+        Assert.Equal(1, item.DaysUntilExpiry);
+    }
 }
