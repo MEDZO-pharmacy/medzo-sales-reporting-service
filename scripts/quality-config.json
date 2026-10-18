@@ -1,0 +1,5 @@
+{
+  "name": "Sales and Reporting",
+  "sourceProject": "medzo-sales-reporting-service.csproj",
+  "testProject": "tests/Medzo.SalesReporting.Tests/Medzo.SalesReporting.Tests.csproj"
+}

@@ -1,0 +1,10 @@
+<Project>
+  <!-- Enable the extra analyzer rules only for the quality workflow/local command. -->
+  <PropertyGroup Condition="'$(QualityAnalysis)' == 'true'">
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
+    <AnalysisLevel>10.0-recommended</AnalysisLevel>
+    <!-- One report per project: referenced projects must not overwrite each other. -->
+    <ErrorLog>$(QualityOutputDirectory)/$(MSBuildProjectName).sarif,version=2.1</ErrorLog>
+  </PropertyGroup>
+</Project>

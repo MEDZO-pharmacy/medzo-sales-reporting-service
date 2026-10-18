@@ -1,0 +1,32 @@
+name: Code Quality and Metrics
+
+on:
+  push:
+    branches: [feature/se3112-code-quality]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Static analysis and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Analyze source, run tests and build quality dashboard
+        shell: pwsh
+        run: ./scripts/Run-CodeQuality.ps1
+      - name: Upload code quality dashboard and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-evidence
+          path: .quality-output
+          include-hidden-files: true
+          if-no-files-found: error
