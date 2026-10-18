@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-net/master/src/Stryker.Core/Stryker.Core/options.schema.json",
+  "stryker-config": {
+    "project": "medzo-sales-reporting-service.csproj",
+    "test-projects": [
+      "tests/Medzo.SalesReporting.Tests/Medzo.SalesReporting.Tests.csproj"
+    ],
+    "mutate": [
+      "Services/BatchRemovalService.cs",
+      "Services/ExpiryAlertService.cs",
+      "Services/SaleItemSearchService.cs",
+      "Services/SaleService.cs"
+    ],
+    "reporters": [
+      "progress",
+      "cleartext",
+      "html",
+      "json",
+      "markdown"
+    ],
+    "thresholds": {
+      "high": 90,
+      "low": 80,
+      "break": 80
+    },
+    "concurrency": 2,
+    "configuration": "Release"
+  }
+}
